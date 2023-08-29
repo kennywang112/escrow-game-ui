@@ -19,6 +19,7 @@ import { clusterApiUrl } from "@solana/web3.js";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import dynamic from 'next/dynamic';
 import { Escrow } from './Room'
+
 export default function Home() {
  
   const [network, setNetwork] = useState(WalletAdapterNetwork.Devnet);

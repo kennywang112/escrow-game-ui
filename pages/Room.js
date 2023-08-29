@@ -1,28 +1,21 @@
 import styles from '../styles/Home.module.css';
-import { Transaction, PublicKey, sendAndConfirmRawTransaction, sendAndConfirmTransaction, PUBLIC_KEY_LENGTH } from '@solana/web3.js';
+import { Transaction, PublicKey } from '@solana/web3.js';
 import bs58 from "bs58";
-import { Metaplex, assertAccountExists, walletAdapterIdentity } from "@metaplex-foundation/js";
-import { Keypair, Connection, clusterApiUrl } from '@solana/web3.js';
+import { Keypair, clusterApiUrl } from '@solana/web3.js';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { PROGRAM_ADDRESS } from "@metaplex-foundation/mpl-auction-house";
 import * as anchor from "@coral-xyz/anchor";
 import {
     TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-    getOrCreateAssociatedTokenAccount,
-    getAccount,
-    getMint
-  } from "@solana/spl-token";
+} from "@solana/spl-token";
+import { Metaplex, walletAdapterIdentity } from "@metaplex-foundation/js"
+import { get_ix, execute_tx } from "./utils"
 
-export const Escrow = ({ onClusterChange }) => {
+export const Escrow = () => {
 
     let escrowIdentifier = `escrow-1`;
-    let METADATA_PROGRAM = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
-    let ESCROW_PROGRAM = new PublicKey("BGXHsoqm7cXC6PfAXcyPNuyNAzUgGs6iushSr2SJCP1v")
 
     let mintA = new PublicKey('D8J6gcTSLPwXS9h4afZvDEQr2qGxscVfUPnrfbHQxhzJ')
     let mintB = new PublicKey('8n7GxVW3ce7vTJ8BDpuiFBfuJFUEdGcNj4cW6vhDS6qk')
-    let mintId = new PublicKey('36KJBG46Ms7daa8MSg2s4z5B1k3YMQn6Xkrg7rX3R8tD')
 
     const wallet = useWallet();
     let connection = new anchor.web3.Connection(clusterApiUrl('devnet'),{commitment:'confirmed'})
@@ -31,80 +24,40 @@ export const Escrow = ({ onClusterChange }) => {
 
     // taker will be the game owner , so this won't change and will need keypair
     // but to exchange , this will only use initializers pubkey
-    let taker = new Keypair.fromSecretKey(bs58.decode('Bhao6w2hvn5LtBgJ6nAno3qTy6WMyn59k7sdbFdJVsRapumSJfF86hZ1wcWJ6SxuEhuJUwC2DoNu5YTA9DyMFSy'))
+    let taker = new Keypair.fromSecretKey(bs58.decode("Bhao6w2hvn5LtBgJ6nAno3qTy6WMyn59k7sdbFdJVsRapumSJfF86hZ1wcWJ6SxuEhuJUwC2DoNu5YTA9DyMFSy"))
     let initializer = new PublicKey('Se9gzT3Ep3E452LPyYaWKYqcCvsAwtHhRQwQvmoXFxG')
+    let holder_nft = [];
 
-    const get_ix = async function() {
+    const metaplex = new Metaplex(connection);
+    metaplex.use(walletAdapterIdentity(wallet));
 
-        const idl = await anchor.Program.fetchIdl(ESCROW_PROGRAM, provider);
-        const program = new anchor.Program(idl, ESCROW_PROGRAM, provider);
-        const initializer_mintA = await getOrCreateAssociatedTokenAccount(connection, wallet, mintA, initializer)
-        const initializer_mintB = await getOrCreateAssociatedTokenAccount(connection, wallet, mintB, initializer)
-        const initializerTokenAccountA = await getAccount(connection, initializer_mintA.address)
-        const initializerTokenAccountB = await getAccount(connection, initializer_mintB.address)
-        const taker_mintA = await getOrCreateAssociatedTokenAccount(connection, taker, mintA, taker.publicKey)
-        const taker_mintB = await getOrCreateAssociatedTokenAccount(connection, taker, mintB, taker.publicKey)
-        const takerTokenAccountA = await getAccount(connection, taker_mintA.address)
-        const takerTokenAccountB = await getAccount(connection, taker_mintB.address)
+    const FindNft = async () => {
 
-        const nftmint = await getMint(connection,mintId)
-        const mint_ata = await getOrCreateAssociatedTokenAccount(connection, wallet, mintId, wallet.publicKey)
+        const nfts = await metaplex.nfts().findAllByOwner({owner: wallet.publicKey})
 
-        const escrowStateId = PublicKey.findProgramAddressSync(
-            [
-            anchor.utils.bytes.utf8.encode("state"),
-            anchor.utils.bytes.utf8.encode(escrowIdentifier)
-            ],
-            ESCROW_PROGRAM
-        )[0];
-        const vaultAuthorityId = PublicKey.findProgramAddressSync(
-            [anchor.utils.bytes.utf8.encode("authority")],
-            ESCROW_PROGRAM
-        )[0];
-        const vaultKey = PublicKey.findProgramAddressSync(
-            [vaultAuthorityId.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mintA.toBuffer()],
-            ASSOCIATED_TOKEN_PROGRAM_ID
-        )[0];
-        const metadataAccount = PublicKey.findProgramAddressSync(
-            [
-                anchor.utils.bytes.utf8.encode("metadata"),
-                METADATA_PROGRAM.toBuffer(),
-                nftmint.address.toBuffer(),
-            ],
-            METADATA_PROGRAM
-        )[0];
+        for (const nft of nfts) {
 
-        return [{
-            program,initializerTokenAccountA,initializerTokenAccountB,mint_ata,
-            escrowStateId,vaultAuthorityId,vaultKey,metadataAccount,nftmint,
-            takerTokenAccountA,takerTokenAccountB
-        }]
+            if(nft.collection && nft.collection.address == "8E8BHMvZiKq7q9xn1dw8rbZr7Vf2uPUdshaNU5mmFeZ8"){
 
+                holder_nft.push(nft)
+
+            }
+
+        }
+
+        if(holder_nft.length != 0){
+
+            console.log('you are the holder !')
+
+        }else{
+            console.log('you are not the holder !')
+        }
     }
-    const execute_tx = async function (tx, connection, wallet){
-
-        tx.feePayer = wallet.publicKey
-        tx.recentBlockhash = (await connection.getLatestBlockhash('confirmed')).blockhash
-
-        const latestBlockHash = await connection.getLatestBlockhash();
-        const signedtx = await wallet.signTransaction(tx)
-        const txid = await connection.sendRawTransaction(signedtx.serialize(),{skipPreflight: false});
-        await connection.confirmTransaction({
-            blockhash: latestBlockHash.blockhash,
-            lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
-            signature: txid
-        })
-
-    }
-
-    const checkEligibility = async () => {
-        
-    };
-    
 
     const Init_Room = async () => {
 
-        const getix = await get_ix()
+        const mintId = holder_nft[0].mintAddress
+        const getix = await get_ix(anchor, provider, connection, wallet, wallet.publicKey, taker, escrowIdentifier, mintId)
         
         const tx = new Transaction();
         const ix = await getix[0].program.methods
@@ -139,7 +92,9 @@ export const Escrow = ({ onClusterChange }) => {
 
     const Exchange = async () => {
 
-        const getix = await get_ix()
+        // initializer in exchange must not change to wallet.publikey
+        const mintId = holder_nft[0].mintAddress
+        const getix = await get_ix(anchor, provider, connection, wallet, initializer, taker, escrowIdentifier, mintId)
 
         const tx = new Transaction();
         const ix = await getix[0].program.methods
@@ -169,7 +124,8 @@ export const Escrow = ({ onClusterChange }) => {
 
     const Cancel = async () => {
 
-        const getix = await get_ix()
+        const mintId = holder_nft[0].mintAddress
+        const getix = await get_ix(anchor, provider, connection, wallet, wallet.publicKey, taker, escrowIdentifier, mintId)
 
         const tx = new Transaction()
         const ix = await getix[0].program.methods
@@ -196,7 +152,7 @@ export const Escrow = ({ onClusterChange }) => {
     if (!wallet.connected) {
         return null;
     }else {
-        checkEligibility();
+        FindNft();
     }
 
     return (
